@@ -42,17 +42,23 @@ getCollection
 
 var mongoose = require('mongoose'),
     Schema = mongoose.Schema;
-require('mongoose-multitenant')('_');
+//require('mongoose-multitenant')('_');
 var util = require('util');
 var NotificationLevelEnum =['info','warn','error'];
 var NotificationModeEnum=['sms','email','ui'];
 var CronJob = require('cron').CronJob;
 var mongoose = require('mongoose');
+
 //var db= require('mongodb');
+var url='mongodb://127.0.0.1:27017/mean-dev';
+var MongoClient = require('mongodb').MongoClient
+    , Server = require('mongodb').Server
+    , format = require('util').format;
 
+var moment = require('moment');
+mongoose.connect(url);
 
-
-var notification= new Schema({
+var notificationSchema= new Schema({
 
     created:{
         type: Date,
@@ -62,7 +68,8 @@ var notification= new Schema({
                 type:String
         },
     userAck:{
-                type:Boolean
+                type:Boolean,
+                default:false
         },
     details:[{
                 level:
@@ -82,38 +89,77 @@ var notification= new Schema({
                 data:{
                     type:mongoose.Schema.Types.Mixed
                 },
-                status:{
-                    type:String
+                isNotified:{
+                    type:Boolean,
+                    default:false
                 }
 
                 }]
 });
 
+var Notification = mongoose.model('notification',notificationSchema);
+
+function getVehicleDocsNotificationObj(tenantId,data){
 
 
 
-function pushNotification(){
+    var notify=new Notification(
+    {
+        tenantId:tenantId,
+        details:[
+            {
+                level:"info",
+                mode:"ui",
+                template:"uitemplate",
+                data:data
 
 
+            },
+            {
+                level:"info",
+                mode:"email",
+                template:"emailtemplate",
+                data:data
 
-
-
-        /*var notification =getModel(itemCategory,req.user.tenant);
-        var vm= new itemModel(req.body);
-        console.log("vehicle",req.body);
-        vm.user = req.user;
-
-        vm.save(function(err) {
-            if (err) {
-                return res.send('500', {
-                    errors: err,
-                    vm: vm
-                });
-            } else {
-                res.jsonp(vm);
             }
-        });
-*/
+
+
+
+        ]
+
+
+    });
+
+    console.log(notify);
+
+    pushNotification(notify);
+
+}
+
+
+
+function pushNotification(data){
+
+
+
+    //console.log('pushNotification   '+ data);
+
+
+        //var not =getModel(data);
+        var vm= new Notification(data);
+        //console.log("vehicle",req.body);
+        //vm.user = req.user;
+
+    vm.save(function(err){
+
+        if(err) console.log(err)
+        else{
+
+            console.log(vm);
+        }
+
+    });
+
 
 
 
@@ -129,41 +175,14 @@ function push(){
 
     //pushItemCollectionData();
 
-    pushNotification();
+
     console.log('You will see this message every second');
 };
 
 
-function getTenants(modelName,callBack){
+function getTenants(modelName,callback){
 
-
-
-    var MongoClient = require('mongodb').MongoClient
-        , Server = require('mongodb').Server
-        , format = require('util').format;
-/*
-    var mongoClient = new MongoClient(new Server('localhost', 27017));
-    mongoClient.open(function(err, mongoClient) {
-        var db1 = mongoClient.db("local");
-
-        db1.collection('t1_orders').find({}).toArray(function(err,result){
-
-            if(err) return err;
-
-            else
-             console.log(result);
-                //callBack(result);
-
-        });
-
-
-        mongoClient.close();
-    });
-*/
-
-
-
-    MongoClient.connect('mongodb://127.0.0.1:27017/mean-dev', function(err, db) {
+    MongoClient.connect(url, function(err, db) {
         if(err) throw err;
 
         var collection = db.collection('users');
@@ -171,9 +190,12 @@ function getTenants(modelName,callBack){
             // Locate all the entries using find
             collection.find({tenant:{$exists:true}}).toArray(function(err, results) {
 
+
                 results.forEach(function(data){
-                    console.log(data.tenant);
-                }
+
+                        callback(data.tenant);
+                    }
+
 
                 );
 
@@ -183,59 +205,54 @@ function getTenants(modelName,callBack){
 
     })
 
-
-
-
-
-
-/*
-    var tenant = mongoose.model(modelName);
-    tenant.find({tenant:{$exists:true}},function(err,result){
-
-        if(err) return err;
-        //  console.log(result);
-        else
-        callBack(result);
-
-    });
-*/
-
 }
 
 
-function pushItemCollectionData(tenants){
-
-console.log(tenants);
-
-    /*tenants.forEach();
-    var item = mongoose.mtModel('t1.Item');
-
-    var mongoQuery = [{}];
 
 
 
-
-
-    item.find({},function(err,result){
-
-
-
-        for(var i = 0; i < result.length; i++) {
-            var item = result[i];
-
-
-            console.log(item._id);
-        }
+function pushItemCollectionData(tenantId){
 
 
 
-        //console.log(itm);
+    var tempDate=moment().add(10, 'days');
+    var prevDate= new Date(tempDate.toISOString());
+    var today= new Date(new Date().toISOString());
+    //console.log(tempDate.toString());
+    //console.log(today.toString());
+
+    var myQuery={$and:[{"__t" : "VehicleDocs"} , {"expDate": {$lte:prevDate }} ,{"expDate": {$gte:today }}]};
+
+    //console.log(myQuery);
+    MongoClient.connect(url, function(err, db) {
+        if(err) throw err;
+
+        var item =  db.collection(tenantId+'_items');
 
 
 
-    });
+        item.find(myQuery).toArray(function(err, results) {
 
-*/
+
+            results.forEach(function(data){
+
+
+                    getVehicleDocsNotificationObj(tenantId,data)
+                    pushNotification(data);
+                    console.log('pushItemCollectionData  '+data.expDate);
+                }
+
+
+            );
+
+
+            db.close();
+        });
+
+    })
+
+
+
 
 }
 
