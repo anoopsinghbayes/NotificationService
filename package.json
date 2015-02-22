@@ -14,5 +14,7 @@
     "mongoose": "~3.8.23",
     "email-templates": "0.0.5",
     "nodemailer": "0.3.x"
+    "mongoose": "~3.8.23",
+    "moment": "~2.9.0"
   }
 }
